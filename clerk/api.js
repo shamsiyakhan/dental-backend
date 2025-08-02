@@ -15,6 +15,20 @@ app.get('/get-clerks', (req, res)=>{
 
 })
 
+
+app.get('/get-patients', (req, res)=>{
+    const sql="select * from user where role='Patient'"
+         conn.query(sql, (err, userResult) => {
+                if (err) {
+                    console.error('Fetch after update error:', err);
+                    res.status(500).json({ error: 'Failed to fetch patient details' });
+                } else {
+                    res.status(200).json({ message: 'Fetched patient Details', user: userResult });
+                }
+            });
+
+})
+
 app.post('/update-patient/:id', (req, res) => {
     const userId = req.params.id;
 

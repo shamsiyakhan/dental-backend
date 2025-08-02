@@ -9,7 +9,7 @@ function generateToken(role, fullname) {
 }
 
 function verifyToken(req, res, next) {
-    const publicRoutes = ['/login', '/register' , '/admin-login']; 
+    const publicRoutes = ['/login', '/register' , '/admin-login', '/clerklogin', '/deptlogin']; 
     console.warn(req.path);
     if (publicRoutes.includes(req.path)) {
         return next(); // Skip JWT check

@@ -1,7 +1,7 @@
 const app=require('../express.js')
 const conn=require('../db.js')
 const unique = require('../uniqueId.js')
-
+const { generateToken } = require('.././jwt');
 
 /* const encoded = Buffer.from('hello world', 'utf-8').toString('base64');   for encryption*/
 
@@ -97,14 +97,14 @@ app.post('/deptlogin', (req, res) => {
         } else if (result.length === 0) {
             res.status(401).json({ error: 'Invalid email or password' })
         } else if(result.length>0){
-        
-            res.status(200).json({ message: 'Login successful', user: result[0] })
+             const token = generateToken(result[0].dept_name, result[0].hodname);
+            res.status(200).json({ message: 'Login successful', user: result[0]  , token:token})
         }
     })
 })
 
 
-app.post('/clerklogin', (req, res) => { 
+app.post('/clerklogin', (req, res) => {  
 
     const sql = "select * from user where email=? and role='clerk'"
     conn.query(sql, [req.body.email], (err, result) => {
@@ -116,7 +116,8 @@ app.post('/clerklogin', (req, res) => {
         } else {
             const decoded = Buffer.from(result[0].password, 'base64').toString('utf-8')
             if (result[0].password === req.body.password) {
-                res.status(200).json({ message: 'Login successful', user: result[0] })
+                const token = generateToken(result[0].role, result[0].fullname);
+                res.status(200).json({ message: 'Login successful', user: result[0] , token: token })
             } else {
                 res.status(401).json({ error: 'Invalid email or password' })
             }
