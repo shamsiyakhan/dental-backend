@@ -176,23 +176,33 @@ app.get('/getPatientTreatments/:id', (req, res) => {
 
 
 app.get('/getPatientChiefComplaint/:id', (req, res) => {
-    const id = req.params.id
-    const sql = "SELECT * FROM cheif_complaint WHERE patientid = ? AND status IS NULL";
+    const id = req.params.id;
 
-    conn.query(sql, [req.params.id], (err, result) => {
+    const sql = `
+        SELECT 
+            c.*, 
+            u.userid, 
+            u.fullname, 
+            u.email, 
+            u.phone
+        FROM cheif_complaint c
+        JOIN user u ON c.patientid = u.userid
+        WHERE c.patientid = ? AND c.status IS NULL
+    `;
+
+    conn.query(sql, [id], (err, result) => {
         if (err) {
-            console.error(err)
-            res.status(500).json({ error: 'Internal server error' })
+            console.error(err);
+            res.status(500).json({ error: 'Internal server error' });
         } else {
             if (result.length > 0) {
-                res.status(200).json({ result: result })
+                res.status(200).json({ result });
             } else {
-                res.status(200).json({ result: "No data found" })
+                res.status(200).json({ result: "No data found" });
             }
-
         }
-    })
-})
+    });
+});
 
 
 app.get('/getPatient/:id', (req, res) => {
