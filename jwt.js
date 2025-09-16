@@ -9,11 +9,11 @@ function generateToken(role, fullname) {
 }
 
 function verifyToken(req, res, next) {
-    const publicRoutes = ['/login', '/register' , '/admin-login', '/clerklogin', '/deptlogin']; 
+    const publicRoutes = ['/login', '/register' , '/admin-login', '/clerklogin', '/deptlogin' , '/api/doctor-login'  ,'/api/OnboardingComplete' , '/api/getDoctorDetail' ]; // ignored routes for jwt token verification
     console.warn(req.path);
-    if (publicRoutes.includes(req.path)) {
-        return next(); // Skip JWT check
-    }
+   if (publicRoutes.some(route => req.path.includes(route))) {
+    return next(); // Skip JWT check
+}
 
     const authHeader = req.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

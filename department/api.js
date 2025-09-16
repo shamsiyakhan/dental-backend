@@ -1,7 +1,7 @@
 const app = require('../express.js')
 const conn = require('../db.js')
 const unique = require('../uniqueId.js')
-
+const sendEmail = require('../mail.js')
 
 app.get('/getDoctors/:id', (req, res) => {
     const sql = "SELECT * FROM doctor WHERE dept_id = ?";
@@ -118,6 +118,7 @@ app.post('/chiefRegister', (req, res) => {
 
 
 
+
 app.get('/getPatients', (req, res) => {
     const sql = "select * from user where role='patient'"
     conn.query(sql, (err, result) => {
@@ -139,7 +140,7 @@ app.get('/getPatientTreatments/:id', (req, res) => {
             res.status(500).json({ error: 'Internal server error' })
         } else {
             if (result.length > 0) {
-               /*  res.status(200).json({ result: result }) */
+                /*  res.status(200).json({ result: result }) */
 
                 if (result.length > 0) {
                     const promises = result.map(doc => {
@@ -247,10 +248,10 @@ app.post('/startTreatment', (req, res) => {
 
 
 app.post('/addAppointment', (req, res) => {
-    
+
     const testid = unique()
-    const sql="insert into appointment(appointment_id , treatment_id , appointment_date  , dept_id , status , payment_status)values(?,?,?,?,?,?)"
-    conn.query(sql,[testid, req.body.treatment_id , req.body.appointment_date , req.body.dept_id ,  req.body.status , req.body.payment_status ],(err, result) => {
+    const sql = "insert into appointment(appointment_id , treatment_id , appointment_date  , dept_id , status , payment_status)values(?,?,?,?,?,?)"
+    conn.query(sql, [testid, req.body.treatment_id, req.body.appointment_date, req.body.dept_id, req.body.status, req.body.payment_status], (err, result) => {
         if (err) {
             console.error(err)
             res.status(500).json({ error: 'Internal server error' })
@@ -280,33 +281,34 @@ app.post('/completeAppointment', (req, res) => {
             console.error(err)
             res.status(500).json({ error: 'Internal server error' })
         } else {
-           /*  res.status(200).json({ message: 'Appointment Updated Successfully' }) */
-           const sql = "update treatment_details set  status='completed' where treatment_id=?"
-           conn.query(sql, [req.body.treatment_id], (err, result) => {
-            if (err) {
-                console.error(err)
-                res.status(500).json({ error: 'Internal server error' })
-            } else {
+            /*  res.status(200).json({ message: 'Appointment Updated Successfully' }) */
+            const sql = "update treatment_details set  status='completed' where treatment_id=?"
+            conn.query(sql, [req.body.treatment_id], (err, result) => {
+                if (err) {
+                    console.error(err)
+                    res.status(500).json({ error: 'Internal server error' })
+                } else {
 
-            }})
+                }
+            })
         }
     })
 })
 
 app.post('/updateComplete', (req, res) => {
     const sql = "update treatment_details set  finding=? ,history=? where treatment_id=?"
-    conn.query(sql, [ req.body.finding, req.body.history , req.body.treatment_id], (err, result) => {
+    conn.query(sql, [req.body.finding, req.body.history, req.body.treatment_id], (err, result) => {
         if (err) {
             console.error(err)
             res.status(500).json({ error: 'Internal server error' })
         } else {
             const sql1 = "update appointment set status='completed' where treatment_id=?"
-            conn.query(sql1, [ req.body.treatment_id], (err, result) => {
+            conn.query(sql1, [req.body.treatment_id], (err, result) => {
                 if (err) {
                     console.error(err)
                     res.status(500).json({ error: 'Internal server error' })
                 } else {
-                     res.status(200).json({ message: 'Appointment Updated Successfully' })
+                    res.status(200).json({ message: 'Appointment Updated Successfully' })
                 }
             })
         }
@@ -559,3 +561,106 @@ app.get('/getcompletedAppointments/:id', (req, res) => {
         }
     });
 });
+
+
+app.get('/api/getTreatments/:deptid', (req, res) => {
+    const query = "select * from treatment_chart where dept_id = ?"
+    conn.query(query, [req.params.deptid], (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Internal server error' });
+        } else {
+            res.status(200).json(result)
+        }
+    });
+})
+
+
+app.get('/api/getDepartments', (req, res) => {
+    const query = "select * from department"
+    conn.query(query, (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Internal server error' });
+        } else {
+            res.status(200).json(result)
+        }
+    });
+})
+
+
+app.get("/api/getUnAssignedPatients/:deptId", (req, res) => {
+    const sql = `
+    SELECT 
+        t.*,
+        u.fullname AS patient_name,
+        u.phone AS patient_phone
+        FROM treatment_details t
+        LEFT JOIN user u ON t.patientid = u.userid
+        WHERE t.dept_id = ? 
+        AND t.status <> 'completed'
+        AND t.status <> 'Assigned';
+
+`;
+
+
+    conn.query(sql, [req.params.deptId], (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Internal server error' });
+        } else {
+            res.status(200).json(result);
+        }
+    });
+});
+
+
+app.get("/api/getAppointments/:deptId", (req, res) => {
+    const sql = `
+        SELECT 
+            a.*,
+            t.treatment_name,
+            u.fullname AS patient_name,
+            u.phone AS patient_phone
+        FROM appointment a
+        LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user u ON t.patientid = u.userid
+        WHERE a.dept_id = ?
+    `;
+    
+    conn.query(sql, [req.params.deptId], (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Internal server error' });
+        } else {
+            res.status(200).json(result);
+        }
+    });
+});
+
+
+app.post('/api/allocateDoctor', (req, res) => {
+    const insertSql = "insert into appointment(appointment_id , treatment_id , appointment_date ,dept_id , status , doctor_id) values(?,?,?,?,?,?)"
+    appointment_date = new Date();
+    appointment_id = unique();
+    appStatus = "Scheduled";
+    const { treatment_id, dept_id, doctor_id } = req.body;
+    conn.query(insertSql, [appointment_id, treatment_id, appointment_date, dept_id, appStatus, doctor_id], (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Internal server error' });
+        } else {
+            //res.status(201).json({ message: 'Doctor allocated successfully', appointment: { appointment_id, treatment_id, appointment_date, dept_id, appStatus, doctor_id } });
+            const updateSql = "update treatment_details set status='Assigned' where treatment_id=?"
+            conn.query(updateSql, [treatment_id], (error, UpdateResult) => {
+                if (error) {
+                    console.error(error);
+                    res.status(500).json({ error: 'Internal server error' });
+                } else {
+                    res.status(201).json({ message: 'Doctor allocated successfully', appointment: { appointment_id, treatment_id, appointment_date, dept_id, appStatus, doctor_id } });
+                }
+            })
+        }
+    });
+})
+

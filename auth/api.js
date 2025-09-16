@@ -53,7 +53,7 @@ app.post('/login', (req, res) => {
     })
 })
 
-app.post('/doctor-login', (req, res) => { 
+app.post('/api/doctor-login', (req, res) => { 
 
     const sql = "select * from doctor where email=?"
     conn.query(sql, [req.body.email], (err, result) => {
@@ -66,6 +66,11 @@ app.post('/doctor-login', (req, res) => {
             /* const decoded = Buffer.from(result[0].password, 'base64').toString('utf-8') */
             if (result[0].password === req.body.password) {
                // res.status(200).json({ message: 'Login successful', user: result[0] })
+
+               if(result[0].onboarding_status===0){
+                res.status(403).json({ error: 'Onboarding pending. Please complete onboarding to access the system. Onboarding link was send on your email' })
+                return
+               }
                 const docSql="select dept_id, dept_name ,  hodname ,dept_username from department where dept_id=?"
                 conn.query(docSql , [result[0].dept_id] , (err , docResult)=>{
                     if(err){
