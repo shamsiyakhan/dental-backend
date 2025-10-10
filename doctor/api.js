@@ -41,9 +41,11 @@ app.post("/api/OnboardingComplete" , (req , res)=>{
 
 app.get("/api/getAppointmentsOfDoctor/:docId", (req, res) => {
     const sql = `
-        SELECT a.*, t.* 
+        SELECT a.*, t.*,p.fullname , p.email , p.phone , d.fullname as doctor_name
         FROM appointment a
         LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user p ON t.patientid = p.userid
+        Left join doctor d on a.doctor_id=d.doctor_id
         WHERE a.doctor_id=? 
           AND DATE(a.appointment_date)=? 
           AND a.status='Scheduled'
@@ -59,5 +61,46 @@ app.get("/api/getAppointmentsOfDoctor/:docId", (req, res) => {
             res.status(200).send({ result });
         }
     });
+});
+
+
+app.get("/api/getSpecificAppointments/:app_id", (req, res) => {
+    const sql = `
+        SELECT a.*, t.*,p.fullname , p.email , p.phone , d.fullname as doctor_name
+        FROM appointment a
+        LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user p ON t.patientid = p.userid
+        Left join doctor d on a.doctor_id=d.doctor_id
+        WHERE a.appointment_id=? 
+    `;
+
+    conn.query(sql, [req.params.app_id], (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).send({ error: err });
+        } else {
+            res.status(200).send({ result });
+        }
+    });
+});
+
+app.post("/api/markAppointmentComplete" , (req , res)=>{
+    const {appointment_id , treatment_notes , prescription , findings , treatment_id}=req.body
+    const sql="UPDATE appointment SET status='Completed' , treatment_notes=? , prescription=? , finding=? WHERE appointment_id=?"
+    conn.query(sql , [treatment_notes , prescription , findings , appointment_id] , (err , result)=>{
+        if(err){
+            res.status(500).send({error:err})
+        }else{
+            /* res.status(200).send({message:"Appointment marked as completed"}) */
+            const updateTreatmentSql="UPDATE treatment_details SET status='Completed' WHERE treatment_id=?"
+            conn.query(updateTreatmentSql , [treatment_id] , (err2 , result2)=>{
+                if(err2){
+                    res.status(500).send({error:err2})
+                }else{
+                    res.status(200).send({message:"Appointment marked as completed and treatment status updated"})
+                }
+            })
+        }
+    })
 });
 

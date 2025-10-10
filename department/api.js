@@ -302,6 +302,8 @@ app.post('/updateComplete', (req, res) => {
             console.error(err)
             res.status(500).json({ error: 'Internal server error' })
         } else {
+            console.warn("updating appointment")
+            console.warn(req.body.treatment_id)
             const sql1 = "update appointment set status='completed' where treatment_id=?"
             conn.query(sql1, [req.body.treatment_id], (err, result) => {
                 if (err) {
@@ -362,7 +364,7 @@ app.get('/getAppointments/:id', (req, res) => {
 });
 
 
-app.get('/getTodayAppointment/:id', (req, res) => {
+app.get('/getTodayAppointment/:id/:user_id', (req, res) => {
     const sql = `
         SELECT 
             a.appointment_id,
@@ -394,12 +396,15 @@ app.get('/getTodayAppointment/:id', (req, res) => {
         LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
         LEFT JOIN department d ON a.dept_id = d.dept_id
         LEFT JOIN user u ON t.patientid = u.userid
+        LEFT JOIN doctor doc on a.doctor_id = doc.doctor_id
 
-        WHERE a.dept_id = ?
+        WHERE a.dept_id = ? 
+        And doc.doctor_id=? 
+          AND a.status = 'Scheduled'
           AND DATE(a.appointment_date) = CURDATE()
     `;
 
-    conn.query(sql, [req.params.id], (err, result) => {
+    conn.query(sql, [req.params.id, req.params.user_id], (err, result) => {
         if (err) {
             console.error(err);
             res.status(500).json({ error: 'Internal server error' });
@@ -410,6 +415,16 @@ app.get('/getTodayAppointment/:id', (req, res) => {
         }
     });
 });
+
+app.get("/api/getTreatmentDetails/:appointment_id", (req, res) => {
+    const sql = `select * from appointment a 
+                 t.treatment_name , t.issue_date , t.finding , t.history ,
+                 c.issue_reported ,
+                 left join treatment_details t on a.treatment_id=t.treatment_id
+                 left join cheif_complaint c on t.complaint_id=c.complaint_id
+
+                where appointment_id=? `
+})
 
 
 app.get('/getScheduledAppointments/:id', (req, res) => {
@@ -462,7 +477,7 @@ app.get('/getScheduledAppointments/:id', (req, res) => {
 });
 
 
-app.get('/getInProgressAppointments/:id', (req, res) => {
+/* app.get('/getInProgressAppointments/:id', (req, res) => {
     const sql = `
         SELECT 
             a.appointment_id,
@@ -509,7 +524,7 @@ app.get('/getInProgressAppointments/:id', (req, res) => {
             res.status(200).json({ result });
         }
     });
-});
+}); */
 
 
 

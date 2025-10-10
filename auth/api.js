@@ -63,7 +63,8 @@ app.post('/api/doctor-login', (req, res) => {
         } else if (result.length === 0) {
             res.status(401).json({ error: 'Invalid email or password' })
         } else {
-            /* const decoded = Buffer.from(result[0].password, 'base64').toString('utf-8') */
+            console.warn(result)
+            const decoded = Buffer.from(result[0].password, 'base64').toString('utf-8')
             if (result[0].password === req.body.password) {
                // res.status(200).json({ message: 'Login successful', user: result[0] })
 
@@ -81,7 +82,8 @@ app.post('/api/doctor-login', (req, res) => {
                             doctor:result[0],
                             department:docResult[0]
                         }
-                        res.status(200).json({message:'Login successful' , user:userDetails})
+                        const token = generateToken("doctor", result[0].fullname);
+                        res.status(200).json({message:'Login successful' , user:userDetails , token:token})
                     }
                 })
             } else {
