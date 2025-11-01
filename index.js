@@ -7,5 +7,6 @@ const department=require('./department/api.js')
 const admin=require('./admin/api.js')
 const clerk=require('./clerk/api.js')
 const doctor=require('./doctor/api.js') 
+const patient=require('./patient/api.js') 
 /* const unique=require('./uniqueId.js')
 console.error(unique()) */

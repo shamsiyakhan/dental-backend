@@ -41,7 +41,15 @@ app.get('/getDoctors/:id', (req, res) => {
 
 app.post('/chiefRegister', (req, res) => {
     const complaintId = unique();
-    const date = new Date();
+// Force IST date as string
+const now = new Date();
+const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes
+const istTime = new Date(now.getTime() + istOffset);
+
+// Format YYYY-MM-DD (string only, not Date object)
+const date = istTime.toISOString().slice(0, 10);
+
+
 
     // Insert chief complaint information into the chief_complaint table
     const sql = "insert into cheif_complaint(complaint_id, patientid, reporting_date, issue_reported, tests, total_charge, payment_status, payment_mode) values(?, ?, ?, ?, ?, ?, ?, ?)";
@@ -296,27 +304,199 @@ app.post('/completeAppointment', (req, res) => {
 })
 
 app.post('/updateComplete', (req, res) => {
-    const sql = "update treatment_details set  finding=? ,history=? where treatment_id=?"
+    // 1. Update treatment_details (finding, history)
+    const sql = "UPDATE treatment_details SET finding=?, history=?, status='completed' WHERE treatment_id=?";
     conn.query(sql, [req.body.finding, req.body.history, req.body.treatment_id], (err, result) => {
         if (err) {
-            console.error(err)
-            res.status(500).json({ error: 'Internal server error' })
-        } else {
-            console.warn("updating appointment")
-            console.warn(req.body.treatment_id)
-            const sql1 = "update appointment set status='completed' where treatment_id=?"
-            conn.query(sql1, [req.body.treatment_id], (err, result) => {
-                if (err) {
-                    console.error(err)
-                    res.status(500).json({ error: 'Internal server error' })
-                } else {
-                    res.status(200).json({ message: 'Appointment Updated Successfully' })
-                }
-            })
+            console.error("Error updating treatment_details:", err);
+            return res.status(500).json({ error: 'Internal server error during treatment update' });
         }
-    })
-})
+        
+        console.warn("Updating appointment status to 'completed'");
+        
+        // 2. Update appointment status
+        const sql1 = "UPDATE appointment SET status='completed' WHERE treatment_id=?";
+        conn.query(sql1, [req.body.treatment_id], (err, result) => {
+            if (err) {
+                console.error("Error updating appointment status:", err);
+                return res.status(500).json({ error: 'Internal server error during appointment update' });
+            }
+        
+            
+            
+            // --- 🔑 START NEW LOGIC: PRESCRIPTION HEADER ---
+            
+            // 3. Insert into dental.prescription (Header)
+            const prescriptionId = unique();
+            const sql2 = "INSERT INTO dental.prescription (prescription_id, treatment_id, prescription_date, doctor_notes , appointment_id) VALUES (?, ?, ?, ? , ?)";
+            const prescriptionValues = [
+                prescriptionId, 
+                req.body.treatment_id, 
+                req.body.prescription_date, 
+                req.body.doctor_notes,
+                req.body.appointment_id
+            ];
+            
+            conn.query(sql2, prescriptionValues, (err, result) => {
+                if (err) {
+                    console.error("Error inserting prescription header:", err);
+                    return res.status(500).json({ error: 'Internal server error during prescription header insert' });
+                }
+                
+                // --- 🔑 START NEW LOGIC: PRESCRIPTION DETAILS ARRAY ---
+                
+                const medications = req.body.medications || []; // Use an empty array if none provided
+                const prescriptionID = prescriptionId; // The new FK for details table
 
+                if (medications.length === 0) {
+                    // No medications to insert, success is achieved at this point
+                    return res.status(200).json({ message: 'Treatment and Prescription completed successfully (no medications provided)' });
+                }
+
+                // Function to handle sequential/iterative insert for the medication array
+                const insertMedication = (index) => {
+                    if (index >= medications.length) {
+                        // 4b. ALL inserts are complete. Send final success response.
+                        return res.status(200).json({ message: 'Treatment, Appointment, and Prescription completed successfully' });
+                    }
+
+                    const med = medications[index];
+                    const sql3 = "INSERT INTO dental.prescription_details (prescription_id, medication_name, dosage, quantity, frequency, duration, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)";
+                    
+                    const detailValues = [
+                        prescriptionID,
+                        med.medication_name,
+                        med.dosage,
+                        med.quantity,
+                        med.frequency,
+                        med.duration,
+                        med.instructions
+                    ];
+
+                    conn.query(sql3, detailValues, (err, result) => {
+                        if (err) {
+                            console.error(`Error inserting prescription detail index ${index}:`, err);
+                            // Send error immediately upon first failure
+                            return res.status(500).json({ error: `Internal server error inserting medication at index ${index}` });
+                        }
+
+                        // Recursively call for the next item
+                        insertMedication(index + 1);
+                    });
+                };
+
+                // 4a. Start the sequential insertion process
+                insertMedication(0);
+                
+                // --- END NEW LOGIC: PRESCRIPTION DETAILS ARRAY ---
+            });
+        
+            // --- END NEW LOGIC: PRESCRIPTION HEADER ---
+        });
+    });
+});
+
+
+app.post('/updateInComplete', (req, res) => {
+    // 1. Update treatment_details (finding, history)
+    const sql = "UPDATE treatment_details SET finding=?, history=?, status='completed' WHERE treatment_id=?";
+    conn.query(sql, [req.body.finding, req.body.history, req.body.treatment_id], (err, result) => {
+        if (err) {
+            console.error("Error updating treatment_details:", err);
+            return res.status(500).json({ error: 'Internal server error during treatment update' });
+        }
+        
+        console.warn("Updating appointment status to 'completed'");
+        
+        // 2. Update appointment status
+        const sql1 = "UPDATE appointment SET status='completed' WHERE treatment_id=?";
+        conn.query(sql1, [req.body.treatment_id], (err, result) => {
+            if (err) {
+                console.error("Error updating appointment status:", err);
+                return res.status(500).json({ error: 'Internal server error during appointment update' });
+            }
+            
+            const appointmentId = unique();
+            const sql3="insert into appointment(appointment_id , treatment_id , appointment_date  , dept_id , status  , doctor_id)values(?,?,?,?,?,?)"
+            conn.query(sql3, [appointmentId, req.body.treatment_id, req.body.next_appointment_date, req.body.dept_id, "Scheduled", req.body.doctor_id], (err, result) => {
+                if (err) {
+                    console.error("Error inserting appointment:", err);
+                    return res.status(500).json({ error: 'Internal server error during appointment insert' });
+                }
+            
+
+            // --- 🔑 START NEW LOGIC: PRESCRIPTION HEADER ---
+            
+            // 3. Insert into dental.prescription (Header)
+            const prescriptionId = unique();
+            const sql2 = "INSERT INTO dental.prescription (prescription_id, treatment_id, prescription_date, doctor_notes , appointment_id) VALUES (?, ?, ?, ? , ?)";
+            const prescriptionValues = [
+                prescriptionId, 
+                req.body.treatment_id, 
+                req.body.prescription_date, 
+                req.body.doctor_notes,
+                req.body.appointment_id
+            ];
+            
+            conn.query(sql2, prescriptionValues, (err, result) => {
+                if (err) {
+                    console.error("Error inserting prescription header:", err);
+                    return res.status(500).json({ error: 'Internal server error during prescription header insert' });
+                }
+                
+                // --- 🔑 START NEW LOGIC: PRESCRIPTION DETAILS ARRAY ---
+                
+                const medications = req.body.medications || []; // Use an empty array if none provided
+                const prescriptionID = prescriptionId; // The new FK for details table
+
+                if (medications.length === 0) {
+                    // No medications to insert, success is achieved at this point
+                    return res.status(200).json({ message: 'Treatment and Prescription completed successfully (no medications provided)' });
+                }
+
+                // Function to handle sequential/iterative insert for the medication array
+                const insertMedication = (index) => {
+                    if (index >= medications.length) {
+                        // 4b. ALL inserts are complete. Send final success response.
+                        return res.status(200).json({ message: 'Treatment, Appointment, and Prescription completed successfully' });
+                    }
+
+                    const med = medications[index];
+                    const sql3 = "INSERT INTO dental.prescription_details (prescription_id, medication_name, dosage, quantity, frequency, duration, instructions) VALUES (?, ?, ?, ?, ?, ?, ?)";
+                    
+                    const detailValues = [
+                        prescriptionID,
+                        med.medication_name,
+                        med.dosage,
+                        med.quantity,
+                        med.frequency,
+                        med.duration,
+                        med.instructions
+                    ];
+
+                    conn.query(sql3, detailValues, (err, result) => {
+                        if (err) {
+                            console.error(`Error inserting prescription detail index ${index}:`, err);
+                            // Send error immediately upon first failure
+                            return res.status(500).json({ error: `Internal server error inserting medication at index ${index}` });
+                        }
+
+                        // Recursively call for the next item
+                        insertMedication(index + 1);
+                    });
+                };
+
+                // 4a. Start the sequential insertion process
+                insertMedication(0);
+                
+                // --- END NEW LOGIC: PRESCRIPTION DETAILS ARRAY ---
+            });
+            });
+        
+            // --- END NEW LOGIC: PRESCRIPTION HEADER ---
+        });
+    });
+});
 app.get('/getAppointments/:id', (req, res) => {
     const sql = `
         SELECT 
@@ -614,6 +794,7 @@ app.get("/api/getUnAssignedPatients/:deptId", (req, res) => {
         LEFT JOIN user u ON t.patientid = u.userid
         WHERE t.dept_id = ? 
         AND t.status <> 'completed'
+        AND t.payment_status='Paid'
         AND t.status <> 'Assigned';
 
 `;
@@ -630,6 +811,68 @@ app.get("/api/getUnAssignedPatients/:deptId", (req, res) => {
 });
 
 
+app.get("/api/getUnPaidAssignedPatients/:deptId", (req, res) => {
+    const sql = `
+    SELECT 
+        t.*,
+        u.fullname AS patient_name,
+        u.phone AS patient_phone
+        FROM treatment_details t
+        LEFT JOIN user u ON t.patientid = u.userid
+        WHERE t.dept_id = ? 
+        AND t.status <> 'completed'
+        AND t.payment_status='Unpaid'
+        AND t.status <> 'Assigned';
+
+`;
+
+
+    conn.query(sql, [req.params.deptId], (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Internal server error' });
+        } else {
+            res.status(200).json(result);
+        }
+    });
+});
+
+
+
+app.get("/api/getInProgressAppointments/:deptId", (req, res) => {
+    const sql = `
+    SELECT 
+        t.*,
+        d.*,
+        do.fullname as doctor_name,
+        a.appointment_date as appointment_date, 
+        a.status as appointment_status,
+        u.fullname AS patient_name,
+        u.phone AS patient_phone
+        FROM treatment_details t
+        LEFT JOIN user u ON t.patientid = u.userid
+        LEFT JOIN appointment a ON t.treatment_id = a.treatment_id
+        LEFT JOIN department d ON t.dept_id = a.dept_id
+        LEFT join doctor do on a.doctor_id=do.doctor_id
+        WHERE t.dept_id = ? 
+        AND t.status <> 'completed'
+        AND t.payment_status='Paid'
+        AND a.status = 'Assigned'
+        AND t.status = 'Assigned';
+
+`;
+
+
+    conn.query(sql, [req.params.deptId], (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Internal server error' });
+        } else {
+            res.status(200).json(result);
+        }
+    });
+});
+
 app.get("/api/getAppointments/:deptId", (req, res) => {
     const sql = `
         SELECT 
@@ -641,6 +884,7 @@ app.get("/api/getAppointments/:deptId", (req, res) => {
         LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
         LEFT JOIN user u ON t.patientid = u.userid
         WHERE a.dept_id = ?
+        AND DATE(a.appointment_date) = CURDATE()
     `;
     
     conn.query(sql, [req.params.deptId], (err, result) => {
@@ -652,6 +896,7 @@ app.get("/api/getAppointments/:deptId", (req, res) => {
         }
     });
 });
+
 
 
 app.post('/api/allocateDoctor', (req, res) => {
@@ -679,3 +924,138 @@ app.post('/api/allocateDoctor', (req, res) => {
     });
 })
 
+
+
+app.get("/api/appointmentsCompletedToday/:deptId", (req, res) => {
+    const sql = `
+        SELECT 
+            a.*,
+            t.treatment_name,
+            t.status,
+            u.fullname AS patient_name,
+            u.phone AS patient_phone,
+            d.fullname as doctor_name
+        FROM appointment a
+        LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user u ON t.patientid = u.userid
+        LEFT JOIN doctor d ON a.doctor_id = d.doctor_id
+        WHERE a.dept_id = ?
+          AND a.status = 'completed'
+          AND DATE(a.appointment_date) = CURDATE()
+    `;
+
+    conn.query(sql, [req.params.deptId], (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        res.status(200).json(result);
+    });
+});
+
+
+app.get("/api/appointmentsCompletedYesterday/:deptId", (req, res) => {
+    const sql = `
+        SELECT 
+            a.*,
+            t.treatment_name,
+            t.status,
+            u.fullname AS patient_name,
+            u.phone AS patient_phone,
+            d.fullname as doctor_name
+        FROM appointment a
+        LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user u ON t.patientid = u.userid
+        LEFT JOIN doctor d ON a.doctor_id = d.doctor_id
+        WHERE a.dept_id = ?
+          AND a.status = 'completed'
+          AND DATE(a.appointment_date) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+    `;
+    conn.query(sql, [req.params.deptId], (err, result) => {
+        if (err) return res.status(500).json({ error: 'Internal server error' });
+        res.status(200).json(result);
+    });
+});
+
+
+app.get("/api/appointmentsCompletedLastWeek/:deptId", (req, res) => {
+    const sql = `
+        SELECT 
+            a.*,
+            t.treatment_name,
+            t.status,
+            u.fullname AS patient_name,
+            u.phone AS patient_phone,
+            d.fullname as doctor_name
+        FROM appointment a
+        LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user u ON t.patientid = u.userid
+        LEFT JOIN doctor d ON a.doctor_id = d.doctor_id
+        WHERE a.dept_id = ?
+          AND a.status = 'completed'
+          AND DATE(a.appointment_date) BETWEEN DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND CURDATE()
+    `;
+    conn.query(sql, [req.params.deptId], (err, result) => {
+        if (err) return res.status(500).json({ error: 'Internal server error' });
+        res.status(200).json(result);
+    });
+});
+
+
+
+app.get("/api/appointmentsCompleted/:deptId", (req, res) => {
+    const sql = `
+        SELECT 
+            a.*,
+            t.treatment_name,
+            t.status,
+            t.issue_date,
+            u.fullname AS patient_name,
+            u.phone AS patient_phone,
+            d.fullname as doctor_name
+        FROM appointment a
+        LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user u ON t.patientid = u.userid
+        LEFT JOIN doctor d ON a.doctor_id = d.doctor_id
+        WHERE a.dept_id = ?
+          AND a.status = 'completed'
+         
+    `;
+
+    conn.query(sql, [req.params.deptId], (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        res.status(200).json(result);
+    });
+});
+
+
+app.get("/api/appointments/completed/:deptId/doctor/:doctorId/:date", (req, res) => {
+    const sql = `
+        SELECT 
+            a.*,
+            t.treatment_name,
+            t.treatment_status,
+            u.fullname AS patient_name,
+            u.phone AS patient_phone,
+            d.doctor_name
+        FROM appointment a
+        LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user u ON t.patientid = u.userid
+        LEFT JOIN doctor d ON a.doctor_id = d.doctor_id
+        WHERE a.dept_id = ?
+          AND a.doctor_id = ?
+          AND a.status = 'completed'
+          AND DATE(a.appointment_date) = CURDATE()
+    `;
+
+    conn.query(sql, [req.params.deptId, req.params.doctorId], (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+        res.status(200).json(result);
+    });
+});

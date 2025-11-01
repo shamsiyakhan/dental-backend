@@ -34,8 +34,8 @@ app.post('/register', (req, res) => {
 
 
 app.post('/login', (req, res) => { 
-
-    const sql = "select * from user where email=?"
+    console.warn(req.body)
+    const sql = "select * from user where email=? and role='Patient'"
     conn.query(sql, [req.body.email], (err, result) => {
         if (err) {
             console.error(err)
@@ -44,8 +44,10 @@ app.post('/login', (req, res) => {
             res.status(401).json({ error: 'Invalid email or password' })
         } else {
             const decoded = Buffer.from(result[0].password, 'base64').toString('utf-8')
+            console.warn(decoded)
             if (decoded === req.body.password) {
-                res.status(200).json({ message: 'Login successful', user: result[0] })
+                const token = generateToken("patient", result[0].fullname);
+                res.status(200).json({ message: 'Login successful', user: result[0], token: token })
             } else {
                 res.status(401).json({ error: 'Invalid email or password' })
             }

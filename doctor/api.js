@@ -104,3 +104,97 @@ app.post("/api/markAppointmentComplete" , (req , res)=>{
     })
 });
 
+app.get("/api/getAppointmentsOfDoctorSpecificDates/:docId/:date", (req, res) => {
+    const sql = `
+        SELECT a.*, t.*,p.fullname , p.email , p.phone , d.fullname as doctor_name
+        FROM appointment a
+        LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user p ON t.patientid = p.userid
+        Left join doctor d on a.doctor_id=d.doctor_id
+        WHERE a.doctor_id=? 
+          AND DATE(a.appointment_date)=? 
+          AND a.status='Scheduled'
+    `;
+
+   const today = new Date().toISOString().slice(0, 10);
+
+    conn.query(sql, [req.params.docId, req.params.date], (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).send({ error: err });
+        } else {
+            res.status(200).send({ result });
+        }
+    });
+});
+
+
+app.get("/api/getCompletedAppointments/:docId", (req, res) => {
+    const sql = `
+        SELECT a.*, t.*,p.fullname , p.email , p.phone , d.fullname as doctor_name
+        FROM appointment a
+        LEFT JOIN treatment_details t ON a.treatment_id = t.treatment_id
+        LEFT JOIN user p ON t.patientid = p.userid
+        Left join doctor d on a.doctor_id=d.doctor_id
+        WHERE a.doctor_id=? 
+          AND a.status='completed'
+    `;
+
+   const today = new Date().toISOString().slice(0, 10);
+
+    conn.query(sql, [req.params.docId], (err, result) => {
+        if (err) {
+            console.error(err);
+            res.status(500).send({ error: err });
+        } else {
+            res.status(200).send({ result });
+        }
+    });
+});
+
+
+
+// GET Doctor by ID
+app.get('/api/doctor/:doctor_id', (req, res) => {
+  const { doctor_id } = req.params;
+
+  const sql = "SELECT * FROM doctor WHERE doctor_id = ?";
+  conn.query(sql, [doctor_id], (err, result) => {
+    if (err) return res.status(500).json({ error: err });
+    if (result.length === 0) return res.status(404).json({ message: "Doctor not found" });
+
+    res.json({ doctor: result[0] });
+  });
+});
+
+// UPDATE Doctor by ID
+app.put('/api/doctor/:doctor_id', (req, res) => {
+  const { doctor_id } = req.params;
+  const {
+    fullname, email, experience, degree, phone_no,
+    address, marital_status, gender, dob, qualification,
+    specialization, biography, onboarding_status
+  } = req.body;
+
+  const sql = `
+    UPDATE doctor SET 
+      fullname=?, email=?, experience=?, degree=?, phone_no=?,
+      address=?, marital_status=?, gender=?, dob=?, qualification=?,
+      specialization=?, biography=?, onboarding_status=?
+    WHERE doctor_id=?
+  `;
+
+  const values = [
+    fullname, email, experience, degree, phone_no,
+    address, marital_status, gender, dob, qualification,
+    specialization, biography, onboarding_status, doctor_id
+  ];
+
+  conn.query(sql, values, (err, result) => {
+    if (err) return res.status(500).json({ error: err });
+    if (result.affectedRows === 0) return res.status(404).json({ message: "Doctor not found" });
+
+    res.json({ message: "Doctor updated successfully" });
+  });
+});
+
