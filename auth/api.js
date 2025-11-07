@@ -134,6 +134,27 @@ app.post('/clerklogin', (req, res) => {
     })
 })
 
+
+app.post('/accountantLogin', (req, res) => {  
+
+    const sql = "select * from user where email=? and role='Accountant'"
+    conn.query(sql, [req.body.email], (err, result) => {
+        if (err) {
+            console.error(err)
+            res.status(500).json({ error: 'Internal server error' })
+        } else if (result.length === 0) {
+            res.status(401).json({ error: 'Invalid email or password' })
+        } else {
+            const decoded = Buffer.from(result[0].password, 'base64').toString('utf-8')
+            if (result[0].password === req.body.password) {
+                const token = generateToken(result[0].role, result[0].fullname);
+                res.status(200).json({ message: 'Login successful', user: result[0] , token: token })
+            } else {
+                res.status(401).json({ error: 'Invalid email or password' })
+            }
+        }
+    })
+})
 app.post('/registerDepartment', (req, res) => {
 
     const deptId = unique()

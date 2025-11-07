@@ -9,7 +9,7 @@ function generateToken(role, fullname) {
 }
 
 function verifyToken(req, res, next) {
-    const publicRoutes = ['/login', '/register' , '/admin-login', '/clerklogin', '/deptlogin' , '/api/doctor-login'  ,'/api/OnboardingComplete' , '/api/getDoctorDetail' ]; // ignored routes for jwt token verification
+    const publicRoutes = ['/login', '/register' , '/admin-login', '/clerklogin', '/deptlogin' , '/api/doctor-login'  ,'/api/OnboardingComplete' , '/api/getDoctorDetail'  , '/accountantLogin']; // ignored routes for jwt token verification
     console.warn(req.path);
    if (publicRoutes.some(route => req.path.includes(route))) {
     return next(); // Skip JWT check

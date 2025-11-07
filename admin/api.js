@@ -456,3 +456,352 @@ app.get('/api/getDoctors/:id', (req, res) => {
         }
     });
 });
+
+
+
+app.post("/add-accountant", (req, res) => {
+    const clerid = unique()
+    const sql = "insert into user(userid , email , password ,fullname , address , gender , marital_status , dob , role , phone , emergency_contact , emergency_name) values (?,?,?,?,? , ?,?,?,?,?,?,?    )"
+    conn.query(sql, [clerid, req.body.email, req.body.password, req.body.fullname, req.body.address, req.body.gender, req.body.marital_status, req.body.dob, 'Accountant', req.body.phone, req.body.emergency_contact, req.body.emergency_name], (err, result) => {
+        if (err) {
+            res.status(500).send({ error: err })
+        } else {
+            res.status(200).send({ result: "Clerk added successfully" })
+        }
+    })
+})
+
+app.get("/get-accountant" , (req , res)=>{
+    const sql="select userid , email  ,fullname , address , gender , marital_status , dob  , phone , emergency_contact , emergency_name from user where role='Accountant'"
+    conn.query(sql , (err , result)=>{
+        if (err) {
+            res.status(500).send({ error: err })
+        } else {
+            res.status(200).send({ result: result })
+        }
+    })
+})
+
+
+app.get('/api/totalRevenue', (req, res) => {
+  try {
+    const sql = `
+      SELECT SUM(payment_amount) AS total_success_amount
+      FROM payments
+      WHERE payment_status = 'Success'
+    `;
+
+    conn.query(sql, (err, result) => {
+      if (err) {
+        console.error('Error executing query:', err);
+        return res.status(500).json({ success: false, message: 'Database query failed' });
+      }
+
+      const total = result[0].total_success_amount || 0;
+      res.json({ success: true, total_success_amount: total });
+    });
+
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+
+app.get('/api/unpaidTreatments', (req, res) => {
+  try {
+    const sql = `
+      SELECT 
+        COUNT(*) AS unpaid_count,
+        SUM(CAST(total_charges AS DECIMAL(10,2))) AS total_unpaid_amount
+      FROM treatment_details
+      WHERE payment_status = 'UnPaid'
+    `;
+
+    conn.query(sql, (err, summaryResult) => {
+      if (err) {
+        console.error('Error fetching summary:', err);
+        return res.status(500).json({ success: false, message: 'Database error' });
+      }
+
+      const summary = summaryResult[0];
+      const unpaidCount = summary.unpaid_count || 0;
+      const totalUnpaid = summary.total_unpaid_amount || 0;
+
+      // Now get list of unpaid treatments
+      const listSql = `
+        SELECT 
+          treatment_id, 
+          treatment_name, 
+          issue_date, 
+          status, 
+          total_charges, 
+          doctorid, 
+          patientid, 
+          dept_id
+        FROM treatment_details
+        WHERE payment_status = 'UnPaid'
+      `;
+
+      conn.query(listSql, (err, listResult) => {
+        if (err) {
+          console.error('Error fetching list:', err);
+          return res.status(500).json({ success: false, message: 'Database error' });
+        }
+
+        res.json({
+          success: true,
+          unpaid_count: unpaidCount,
+          total_unpaid_amount: totalUnpaid,
+          unpaid_list: listResult
+        });
+      });
+    });
+
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+
+app.get('/api/todaysPayments', (req, res) => {
+  try {
+    // Step 1: Query total + count for today's successful payments
+    const summarySql = `
+      SELECT 
+        COUNT(*) AS total_count,
+        SUM(payment_amount) AS total_amount
+      FROM payments
+      WHERE payment_status = 'Success'
+        AND DATE(payment_date) = CURDATE()
+    `;
+
+    conn.query(summarySql, (err, summaryResult) => {
+      if (err) {
+        console.error('Error fetching summary:', err);
+        return res.status(500).json({ success: false, message: 'Database error' });
+      }
+
+      const summary = summaryResult[0];
+      const totalCount = summary.total_count || 0;
+      const totalAmount = summary.total_amount || 0;
+
+      // Step 2: Query the list of today’s successful payments
+      const listSql = `
+        SELECT 
+          payment_id,
+          payment_date,
+          payment_amount,
+          payment_type,
+          transaction_id,
+          upi_app,
+          card_last4,
+          treatment_id,
+          complaint_id
+        FROM payments
+        WHERE payment_status = 'Success'
+          AND DATE(payment_date) = CURDATE()
+        ORDER BY payment_date DESC
+      `;
+
+      conn.query(listSql, (err, listResult) => {
+        if (err) {
+          console.error('Error fetching list:', err);
+          return res.status(500).json({ success: false, message: 'Database error' });
+        }
+
+        res.json({
+          success: true,
+          total_count: totalCount,
+          total_amount: totalAmount,
+          payments_list: listResult
+        });
+      });
+    });
+
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+app.get('/api/unpaidTreatmentsList', (req, res) => {
+  try {
+    // Step 1️⃣ — Get unpaid summary
+    const summarySql = `
+      SELECT 
+        COUNT(*) AS unpaid_count,
+        SUM(CAST(total_charges AS DECIMAL(10,2))) AS total_unpaid_amount
+      FROM treatment_details
+      WHERE payment_status = 'UnPaid'
+    `;
+
+    conn.query(summarySql, (err, summaryResult) => {
+      if (err) {
+        console.error('❌ Error fetching summary:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Database error fetching unpaid summary'
+        });
+      }
+
+      const summary = summaryResult[0] || {};
+      const unpaidCount = summary.unpaid_count || 0;
+      const totalUnpaid = summary.total_unpaid_amount || 0;
+
+      // Step 2️⃣ — Get unpaid treatments with department name + patient name
+      const listSql = `
+        SELECT 
+          t.treatment_id,
+          t.treatment_name,
+          t.issue_date,
+          t.status,
+          CAST(t.total_charges AS DECIMAL(10,2)) AS total_charges,
+          t.payment_status,
+          d.dept_name AS department_name,
+          u.fullname AS patient_name,
+          t.doctorid
+        FROM treatment_details AS t
+        LEFT JOIN department AS d ON d.dept_id = t.dept_id
+        LEFT JOIN user AS u ON u.userid = t.patientid
+        WHERE t.payment_status = 'UnPaid'
+        ORDER BY t.issue_date DESC
+      `;
+
+      conn.query(listSql, (err, listResult) => {
+        if (err) {
+          console.error('❌ Error fetching unpaid list:', err);
+          return res.status(500).json({
+            success: false,
+            message: 'Database error fetching unpaid list'
+          });
+        }
+
+        // Step 3️⃣ — Final response
+        res.json({
+          success: true,
+          unpaid_count: unpaidCount,
+          total_unpaid_amount: totalUnpaid,
+          unpaid_list: listResult || []
+        });
+      });
+    });
+
+  } catch (error) {
+    console.error('⚠️ Server error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+
+app.get('/api/patientsUnpaidSummary', (req, res) => {
+  try {
+    const sql = `
+      SELECT 
+        u.userid,
+        u.fullname,
+        u.email,
+        u.phone,
+        u.address,
+        u.gender,
+        u.dob,
+        COALESCE(SUM(CAST(t.total_charges AS DECIMAL(10,2))), 0) AS total_unpaid_amount,
+        COUNT(t.treatment_id) AS unpaid_treatments
+      FROM user AS u
+      LEFT JOIN treatment_details AS t 
+        ON t.patientid = u.userid AND t.payment_status = 'UnPaid'
+      WHERE LOWER(u.role) = 'patient'
+      GROUP BY 
+        u.userid, u.fullname, u.email, u.phone, 
+        u.address, u.gender, u.dob
+      ORDER BY total_unpaid_amount DESC;
+    `;
+
+    conn.query(sql, (err, result) => {
+      if (err) {
+        console.error('❌ Error executing query:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Database query failed'
+        });
+      }
+
+      res.json({
+        success: true,
+        count: result.length,
+        patients: result
+      });
+    });
+
+  } catch (error) {
+    console.error('⚠️ Server error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+
+app.get('/api/patientTreatments/:patientid', (req, res) => {
+  try {
+    const { patientid } = req.params;
+
+    // Validate input
+    if (!patientid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient ID is required'
+      });
+    }
+
+    const sql = `
+      SELECT 
+        t.treatment_id,
+        t.treatment_name,
+        t.issue_date,
+        t.status,
+        CAST(t.total_charges AS DECIMAL(10,2)) AS total_charges,
+        t.finding,
+        t.history,
+        t.payment_status,
+        d.dept_name AS department_name,
+        u.fullname AS patient_name,
+        doc.fullname AS doctor_name
+      FROM treatment_details AS t
+      LEFT JOIN department AS d ON d.dept_id = t.dept_id
+      LEFT JOIN user AS u ON u.userid = t.patientid
+      LEFT JOIN user AS doc ON doc.userid = t.doctorid
+      WHERE t.patientid = ?
+      ORDER BY t.issue_date DESC
+    `;
+
+    conn.query(sql, [patientid], (err, result) => {
+      if (err) {
+        console.error('❌ Error fetching treatments:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Database query failed'
+        });
+      }
+
+      res.json({
+        success: true,
+        count: result.length,
+        treatments: result
+      });
+    });
+
+  } catch (error) {
+    console.error('⚠️ Server error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
